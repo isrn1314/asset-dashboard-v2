@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="資產總覽">
+<meta name="theme-color" content="#0a1220">
+<meta name="description" content="手機優先的個人資產總覽工具，快速管理銀行、投資與總資產。">
+<meta name="app-build" content="2026-03-26-002">
+<title>個人資產總覽</title>
+<link rel="manifest" href="manifest.webmanifest?v=2026-03-26-002">
+<link rel="icon" href="app-icon.svg?v=2026-03-26-002" type="image/svg+xml">
+<link rel="apple-touch-icon" href="app-icon.svg?v=2026-03-26-002">
+<link rel="stylesheet" href="style.css?v=2026-03-26-002">
+<script defer src="script.js?v=2026-03-26-002"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="app-header__copy">
+        <p class="app-eyebrow">Asset Dashboard</p>
+        <h1 class="app-title">個人資產總覽</h1>
+        <p class="app-subtitle">手機優先設計，專注在快速查看總額與更新資產數字。</p>
+      </div>
+      <div class="app-header__status">
+        <span class="status-chip" id="saveStatusChip" aria-live="polite">已儲存</span>
+        <p class="status-text" id="saveStatusText">尚未建立資料</p>
+      </div>
+    </header>
+
+    <nav class="view-tabs" aria-label="主要功能分頁">
+      <button class="view-tab is-active" type="button" data-view="overview">總覽</button>
+      <button class="view-tab" type="button" data-view="accounts">銀行</button>
+      <button class="view-tab" type="button" data-view="investments">投資</button>
+      <button class="view-tab" type="button" data-view="settings">設定</button>
+    </nav>
+
+    <main class="view-frame">
+      <section class="view-panel is-active" id="view-overview" aria-labelledby="overview-title">
+        <div class="content-stack">
+          <article class="surface surface--hero">
+            <div class="hero-head">
+              <div>
+                <p class="section-eyebrow">Net Worth</p>
+                <h2 class="section-title" id="overview-title">總資產</h2>
+              </div>
+              <span class="hero-badge" id="overviewAssetCount">0 項資產</span>
+            </div>
+            <p class="hero-amount" id="overviewNetWorth">NT$0</p>
+            <p class="hero-caption" id="overviewCaption">新增銀行與投資項目後，這裡會即時顯示總額與比例。</p>
+            <div class="metric-grid">
+              <article class="metric-card">
+                <span class="metric-card__label">銀行小計</span>
+                <strong class="metric-card__value" id="overviewBankTotal">NT$0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-card__label">投資小計</span>
+                <strong class="metric-card__value" id="overviewInvestmentTotal">NT$0</strong>
+              </article>
+            </div>
+          </article>
+
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Allocation</p>
+                <h2 class="section-title">資產配置</h2>
+              </div>
+            </div>
+            <div class="allocation-list" id="allocationList"></div>
+          </article>
+
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Holdings</p>
+                <h2 class="section-title">主要部位</h2>
+              </div>
+            </div>
+            <div class="holding-list" id="holdingList"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view-panel" id="view-accounts" aria-labelledby="accounts-title">
+        <div class="content-stack">
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Bank Accounts</p>
+                <h2 class="section-title" id="accounts-title">銀行帳戶</h2>
+                <p class="section-description">集中管理現金與活存，輸入金額後會自動計入總資產。</p>
+              </div>
+            </div>
+            <div class="metric-grid">
+              <article class="metric-card">
+                <span class="metric-card__label">帳戶數量</span>
+                <strong class="metric-card__value" id="accountCount">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-card__label">銀行小計</span>
+                <strong class="metric-card__value" id="accountSubtotal">NT$0</strong>
+              </article>
+            </div>
+            <form class="editor-form" id="accountCreateForm" novalidate>
+              <div class="field-group">
+                <label class="field-label" for="accountNameInput">帳戶名稱</label>
+                <input class="field-input" id="accountNameInput" name="name" type="text" maxlength="30" placeholder="例如：主帳戶">
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="accountAmountInput">目前金額（台幣）</label>
+                <input class="field-input" id="accountAmountInput" name="amount" type="number" inputmode="decimal" min="0" placeholder="0">
+              </div>
+              <button class="button button--primary button--block" type="submit">新增帳戶</button>
+            </form>
+          </article>
+
+          <div class="entry-list" id="accountList"></div>
+        </div>
+      </section>
+
+      <section class="view-panel" id="view-investments" aria-labelledby="investments-title">
+        <div class="content-stack">
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Investments</p>
+                <h2 class="section-title" id="investments-title">投資部位</h2>
+                <p class="section-description">只記目前市值，不拆過多欄位，讓手機更新更俐落。</p>
+              </div>
+            </div>
+            <div class="metric-grid">
+              <article class="metric-card">
+                <span class="metric-card__label">標的數量</span>
+                <strong class="metric-card__value" id="investmentCount">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-card__label">投資小計</span>
+                <strong class="metric-card__value" id="investmentSubtotal">NT$0</strong>
+              </article>
+            </div>
+            <form class="editor-form" id="investmentCreateForm" novalidate>
+              <div class="field-group">
+                <label class="field-label" for="investmentNameInput">投資名稱</label>
+                <input class="field-input" id="investmentNameInput" name="name" type="text" maxlength="40" placeholder="例如：0050 元大台灣50">
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="investmentAmountInput">目前市值（台幣）</label>
+                <input class="field-input" id="investmentAmountInput" name="amount" type="number" inputmode="decimal" min="0" placeholder="0">
+              </div>
+              <button class="button button--primary button--block" type="submit">新增投資</button>
+            </form>
+          </article>
+
+          <div class="entry-list" id="investmentList"></div>
+        </div>
+      </section>
+
+      <section class="view-panel" id="view-settings" aria-labelledby="settings-title">
+        <div class="content-stack">
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Status</p>
+                <h2 class="section-title" id="settings-title">儲存與資料</h2>
+              </div>
+            </div>
+            <div class="status-card">
+              <span class="status-chip status-chip--inline" id="settingsStatusChip" aria-live="polite">已儲存</span>
+              <p class="status-card__text" id="settingsStatusText">尚未建立資料</p>
+            </div>
+            <ul class="info-list">
+              <li>資料只存在你目前使用的瀏覽器裝置中。</li>
+              <li>修改資料後會自動儲存，不需要手動按鈕。</li>
+              <li>建議定期匯出備份到 iPhone 的「檔案」或 iCloud Drive。</li>
+            </ul>
+          </article>
+
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Backup</p>
+                <h2 class="section-title">備份與還原</h2>
+              </div>
+            </div>
+            <div class="action-grid">
+              <button class="button button--primary" id="exportBackupButton" type="button">匯出備份</button>
+              <button class="button button--secondary" id="importBackupButton" type="button">匯入備份</button>
+            </div>
+            <input id="importFileInput" type="file" accept="application/json,.json" hidden>
+          </article>
+
+          <article class="surface surface--section surface--danger">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Reset</p>
+                <h2 class="section-title">重新開始</h2>
+                <p class="section-description">如果要清空目前資料，可以從這裡重置。</p>
+              </div>
+            </div>
+            <button class="button button--danger button--block" id="resetButton" type="button">清除所有資料</button>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
