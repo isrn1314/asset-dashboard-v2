@@ -47,6 +47,7 @@ let appState = loadState();
 let saveState = "saved";
 let saveTimer = null;
 
+// App bootstrap
 boot();
 
 function boot(){
@@ -58,6 +59,76 @@ function boot(){
   checkForLatestBuild();
 }
 
+// App lifecycle helpers
+// Build refresh helpers
+function cleanupBuildQuery(){
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("v")) return;
+    url.searchParams.delete("v");
+    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch (error) {
+    // Ignore unsupported URL contexts such as some local previews.
+  }
+}
+
+async function checkForLatestBuild(){
+  try {
+    const probeUrl = new URL(window.location.href);
+    probeUrl.searchParams.set("_buildCheck", Date.now().toString());
+    const response = await fetch(probeUrl.toString(), { cache: "no-store" });
+    if (!response.ok) return;
+
+    const html = await response.text();
+    const match = html.match(/<meta\s+name=["']app-build["']\s+content=["']([^"']+)["']/i);
+    const latestBuild = match?.[1]?.trim();
+    if (!latestBuild || latestBuild === BUILD_ID) return;
+
+    const sessionKey = `${BUILD_REFRESH_KEY_PREFIX}${latestBuild}`;
+    if (sessionStorage.getItem(sessionKey)) return;
+
+    sessionStorage.setItem(sessionKey, "1");
+    const reloadUrl = new URL(window.location.href);
+    reloadUrl.searchParams.set("v", latestBuild);
+    window.location.replace(reloadUrl.toString());
+  } catch (error) {
+    // Ignore fetch errors; local previews and some embedded browsers may not support this check.
+  }
+}
+
+// View state helpers
+function loadStoredView(fallback){
+  try {
+    const raw = localStorage.getItem(UI_STORAGE_KEY);
+    return VIEW_NAMES.includes(raw) ? raw : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function persistActiveView(viewName){
+  try {
+    localStorage.setItem(UI_STORAGE_KEY, viewName);
+  } catch (error) {
+    // Ignore UI-state persistence failure because it should not block data edits.
+  }
+}
+
+function applyView(viewName){
+  const nextView = VIEW_NAMES.includes(viewName) ? viewName : "overview";
+  appState.ui.activeView = nextView;
+
+  dom.tabs.forEach((tabButton) => {
+    tabButton.classList.toggle("is-active", tabButton.dataset.view === nextView);
+  });
+
+  dom.panels.forEach((panel) => {
+    panel.classList.toggle("is-active", panel.id === `view-${nextView}`);
+  });
+}
+
+// State creation and normalization
+// State creation
 function createDefaultState(){
   return {
     schemaVersion: 3,
@@ -81,8 +152,55 @@ function loadState(){
   }
 }
 
+function createId(){
+  return `asset-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Import validation
+function isPlainObject(value){
+  return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+function normalizeColor(value, fallback){
+  return typeof value === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())
+    ? value.trim()
+    : fallback;
+}
+
+function isValidImportPayload(payload){
+  if (!isPlainObject(payload)) return false;
+  if (isPlainObject(payload.state)) return true;
+
+  return [
+    "accounts",
+    "investments",
+    "accs",
+    "etfs",
+    "ui",
+    "prefs",
+    "meta",
+    "schemaVersion"
+  ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+}
+
+function getImportErrorMessage(error){
+  if (error instanceof SyntaxError) {
+    return "JSON 格式錯誤";
+  }
+
+  if (error?.message === "invalid-backup") {
+    return "不是可接受的備份格式";
+  }
+
+  return "匯入處理失敗，請稍後再試";
+}
+
+// State normalization
 function normalizeState(rawState){
-  const source = rawState && typeof rawState === "object" ? rawState : createDefaultState();
+  const source = isPlainObject(rawState) ? rawState : createDefaultState();
+  const uiSource = isPlainObject(source.ui) ? source.ui : {};
+  const prefsSource = isPlainObject(source.prefs) ? source.prefs : {};
+  const metaSource = isPlainObject(source.meta) ? source.meta : {};
   const legacyAccounts = Array.isArray(source.accounts) ? source.accounts : Array.isArray(source.accs) ? source.accs : [];
   const legacyInvestments = Array.isArray(source.investments) ? source.investments : Array.isArray(source.etfs) ? source.etfs : [];
 
@@ -91,21 +209,23 @@ function normalizeState(rawState){
     accounts: legacyAccounts.map((item, index) => normalizeEntry(item, index, "accounts")),
     investments: legacyInvestments.map((item, index) => normalizeEntry(item, index, "investments")),
     ui: {
-      activeView: VIEW_NAMES.includes(source.ui?.activeView)
-        ? source.ui.activeView
-        : VIEW_NAMES.includes(source.prefs?.lastTab)
-          ? source.prefs.lastTab
+      activeView: VIEW_NAMES.includes(uiSource.activeView)
+        ? uiSource.activeView
+        : VIEW_NAMES.includes(prefsSource.lastTab)
+          ? prefsSource.lastTab
           : "overview"
     },
     meta: {
-      lastSavedAt: typeof source.meta?.lastSavedAt === "string" ? source.meta.lastSavedAt : "",
-      lastSavedMode: typeof source.meta?.lastSavedMode === "string" ? source.meta.lastSavedMode : ""
+      lastSavedAt: typeof metaSource.lastSavedAt === "string" ? metaSource.lastSavedAt : "",
+      lastSavedMode: typeof metaSource.lastSavedMode === "string" ? metaSource.lastSavedMode : ""
     }
   };
 }
 
 function normalizeEntry(rawEntry, index, kind){
-  const source = rawEntry && typeof rawEntry === "object" ? rawEntry : {};
+  const source = isPlainObject(rawEntry) ? rawEntry : {};
+  const palette = kind === "accounts" ? ACCOUNT_COLORS : INVESTMENT_COLORS;
+  const fallbackColor = palette[index % palette.length];
   const migratedAmount = source.amount
     ?? source.balance
     ?? source.bal
@@ -114,12 +234,10 @@ function normalizeEntry(rawEntry, index, kind){
     ?? calculateLegacyInvestmentValue(source);
 
   return {
-    id: typeof source.id === "string" && source.id ? source.id : createId(),
-    name: normalizeName(source.name, kind === "accounts" ? "未命名帳戶" : "未命名投資"),
+    id: typeof source.id === "string" && source.id.trim() ? source.id.trim() : createId(),
+    name: normalizeName(typeof source.name === "string" ? source.name : "", kind === "accounts" ? "未命名帳戶" : "未命名投資"),
     amount: normalizeAmountInput(migratedAmount),
-    color: typeof source.color === "string" && source.color
-      ? source.color
-      : (kind === "accounts" ? ACCOUNT_COLORS : INVESTMENT_COLORS)[index % (kind === "accounts" ? ACCOUNT_COLORS.length : INVESTMENT_COLORS.length)]
+    color: normalizeColor(source.color, fallbackColor)
   };
 }
 
@@ -130,11 +248,14 @@ function calculateLegacyInvestmentValue(source){
   return legacyTotal > 0 ? String(legacyTotal) : "";
 }
 
+// Event binding and input handlers
 function bindEvents(){
+  // View navigation
   dom.tabs.forEach((tabButton) => {
     tabButton.addEventListener("click", () => showView(tabButton.dataset.view));
   });
 
+  // Create forms
   dom.accountCreateForm.addEventListener("submit", (event) => {
     event.preventDefault();
     createEntry("accounts");
@@ -145,16 +266,19 @@ function bindEvents(){
     createEntry("investments");
   });
 
+  // Entry list editing
   dom.accountList.addEventListener("input", handleEntryInput);
   dom.investmentList.addEventListener("input", handleEntryInput);
   dom.accountList.addEventListener("click", handleEntryClick);
   dom.investmentList.addEventListener("click", handleEntryClick);
 
+  // Backup and reset actions
   dom.exportBackupButton.addEventListener("click", exportBackup);
   dom.importBackupButton.addEventListener("click", () => dom.importFileInput.click());
   dom.importFileInput.addEventListener("change", importBackup);
   dom.resetButton.addEventListener("click", resetAllData);
 
+  // Page lifecycle sync
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && saveState !== "saved") {
       persistState("auto");
@@ -171,6 +295,7 @@ function bindEvents(){
     checkForLatestBuild();
   });
 
+  // Cross-tab state sync
   window.addEventListener("storage", (event) => {
     if (event.key === STORAGE_KEY) {
       appState = loadState();
@@ -185,6 +310,7 @@ function bindEvents(){
   });
 }
 
+// Entry creation
 function createEntry(kind){
   const isAccount = kind === "accounts";
   const nameInput = isAccount ? dom.accountNameInput : dom.investmentNameInput;
@@ -214,6 +340,7 @@ function createEntry(kind){
   scheduleSave();
 }
 
+// Entry editing and removal
 function handleEntryInput(event){
   const field = event.target;
   const card = field.closest("[data-kind][data-id]");
@@ -256,12 +383,15 @@ function findEntry(kind, id){
   return appState[kind].find((item) => item.id === id);
 }
 
+// View switching helpers
 function showView(viewName){
   const nextView = VIEW_NAMES.includes(viewName) ? viewName : "overview";
   applyView(nextView);
   persistActiveView(nextView);
 }
 
+// Rendering
+// Primary view rendering
 function renderApp(){
   renderOverview();
   renderCollectionSummaries();
@@ -374,6 +504,16 @@ function renderCollectionList(kind){
     : createEmptyState(title, description);
 }
 
+// Empty and status display helpers
+function createEmptyState(title, description){
+  return `
+    <article class="empty-state surface">
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(description)}</p>
+    </article>
+  `;
+}
+
 function renderSaveMetadata(){
   const metaText = buildSaveMetaText();
   dom.saveStatusText.textContent = metaText;
@@ -394,6 +534,7 @@ function buildSaveMetaText(){
   return `${modeText} · ${appState.meta.lastSavedAt}`;
 }
 
+// Derived data helpers
 function calculateTotals(){
   const bank = appState.accounts.reduce((sum, item) => sum + parseAmount(item.amount), 0);
   const investment = appState.investments.reduce((sum, item) => sum + parseAmount(item.amount), 0);
@@ -409,6 +550,8 @@ function buildHoldings(){
     .sort((left, right) => right.amount - left.amount);
 }
 
+// Persistence and backup
+// Save status and scheduling
 function applySaveState(nextState){
   saveState = nextState;
   const appearance = {
@@ -430,6 +573,7 @@ function scheduleSave(){
   saveTimer = window.setTimeout(() => persistState("auto"), 650);
 }
 
+// Local persistence
 function persistState(mode){
   clearTimeout(saveTimer);
   try {
@@ -445,6 +589,7 @@ function persistState(mode){
   }
 }
 
+// Backup import and export
 function exportBackup(){
   try {
     if (saveState !== "saved") persistState("manual");
@@ -476,20 +621,23 @@ function importBackup(event){
   reader.onload = () => {
     try {
       const payload = JSON.parse(String(reader.result || "{}"));
-      if (!payload.state || typeof payload.state !== "object") {
+      if (!isValidImportPayload(payload)) {
         throw new Error("invalid-backup");
       }
 
-      appState = normalizeState(payload.state);
-      appState.meta.lastSavedAt = new Date().toLocaleString("zh-TW", { hour12: false });
-      appState.meta.lastSavedMode = "import";
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      const stateSource = isPlainObject(payload.state) ? payload.state : payload;
+      const nextState = normalizeState(stateSource);
+      nextState.meta.lastSavedAt = new Date().toLocaleString("zh-TW", { hour12: false });
+      nextState.meta.lastSavedMode = "import";
+      const serializedState = JSON.stringify(nextState);
+      localStorage.setItem(STORAGE_KEY, serializedState);
+      appState = nextState;
       renderApp();
-      persistActiveView(appState.ui.activeView);
+      persistActiveView(nextState.ui.activeView);
       applySaveState("saved");
       alert("匯入完成。");
     } catch (error) {
-      alert("匯入失敗，請確認檔案格式是否正確。");
+      alert(getImportErrorMessage(error));
     } finally {
       event.target.value = "";
     }
@@ -498,6 +646,7 @@ function importBackup(event){
   reader.readAsText(file, "utf-8");
 }
 
+// Data reset
 function resetAllData(){
   if (!confirm("確定要清除所有資料並重新開始嗎？")) return;
   clearTimeout(saveTimer);
@@ -508,84 +657,8 @@ function resetAllData(){
   applySaveState("saved");
 }
 
-function createEmptyState(title, description){
-  return `
-    <article class="empty-state surface">
-      <strong>${escapeHtml(title)}</strong>
-      <p>${escapeHtml(description)}</p>
-    </article>
-  `;
-}
-
-function cleanupBuildQuery(){
-  try {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has("v")) return;
-    url.searchParams.delete("v");
-    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-  } catch (error) {
-    // Ignore unsupported URL contexts such as some local previews.
-  }
-}
-
-async function checkForLatestBuild(){
-  try {
-    const probeUrl = new URL(window.location.href);
-    probeUrl.searchParams.set("_buildCheck", Date.now().toString());
-    const response = await fetch(probeUrl.toString(), { cache: "no-store" });
-    if (!response.ok) return;
-
-    const html = await response.text();
-    const match = html.match(/<meta\s+name=["']app-build["']\s+content=["']([^"']+)["']/i);
-    const latestBuild = match?.[1]?.trim();
-    if (!latestBuild || latestBuild === BUILD_ID) return;
-
-    const sessionKey = `${BUILD_REFRESH_KEY_PREFIX}${latestBuild}`;
-    if (sessionStorage.getItem(sessionKey)) return;
-
-    sessionStorage.setItem(sessionKey, "1");
-    const reloadUrl = new URL(window.location.href);
-    reloadUrl.searchParams.set("v", latestBuild);
-    window.location.replace(reloadUrl.toString());
-  } catch (error) {
-    // Ignore fetch errors; local previews and some embedded browsers may not support this check.
-  }
-}
-
-function createId(){
-  return `asset-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function loadStoredView(fallback){
-  try {
-    const raw = localStorage.getItem(UI_STORAGE_KEY);
-    return VIEW_NAMES.includes(raw) ? raw : fallback;
-  } catch (error) {
-    return fallback;
-  }
-}
-
-function persistActiveView(viewName){
-  try {
-    localStorage.setItem(UI_STORAGE_KEY, viewName);
-  } catch (error) {
-    // Ignore UI-state persistence failure because it should not block data edits.
-  }
-}
-
-function applyView(viewName){
-  const nextView = VIEW_NAMES.includes(viewName) ? viewName : "overview";
-  appState.ui.activeView = nextView;
-
-  dom.tabs.forEach((tabButton) => {
-    tabButton.classList.toggle("is-active", tabButton.dataset.view === nextView);
-  });
-
-  dom.panels.forEach((panel) => {
-    panel.classList.toggle("is-active", panel.id === `view-${nextView}`);
-  });
-}
-
+// Formatting and utility helpers
+// Input normalization
 function normalizeName(value, fallback){
   const trimmed = String(value ?? "").replace(/\s+/g, " ").trim();
   return trimmed || fallback;
@@ -593,14 +666,24 @@ function normalizeName(value, fallback){
 
 function normalizeAmountInput(value){
   if (value === "" || value === null || value === undefined) return "";
-  return String(Math.max(0, parseAmount(value)));
+  const parsed = parseAmount(value);
+  return String(Math.max(0, parsed));
 }
 
 function parseAmount(value){
-  const parsed = Number.parseFloat(String(value ?? "").replace(/,/g, "").trim());
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const parsed = Number.parseFloat(value.replace(/,/g, "").trim());
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Value formatting
 function formatCurrency(value){
   return CURRENCY_FORMATTER.format(value || 0);
 }
@@ -614,6 +697,7 @@ function formatPercent(part, total){
   return `${calculateRatioNumber(part, total).toFixed(1)}%`;
 }
 
+// HTML escaping
 function escapeHtml(value){
   return String(value)
     .replace(/&/g, "&amp;")
