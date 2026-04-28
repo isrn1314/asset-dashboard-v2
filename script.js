@@ -157,8 +157,16 @@ function createId(){
 }
 
 // Import validation
+const IMPORT_STATE_COLLECTION_KEYS = ["accounts", "investments"];
+const IMPORT_LEGACY_COLLECTION_KEYS = ["accounts", "investments", "accs", "etfs"];
+const IMPORT_AMOUNT_KEYS = ["amount", "balance", "bal", "value", "val"];
+
 function isPlainObject(value){
   return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+function hasOwnKey(source, key){
+  return Object.prototype.hasOwnProperty.call(source, key);
 }
 
 function normalizeColor(value, fallback){
@@ -167,20 +175,77 @@ function normalizeColor(value, fallback){
     : fallback;
 }
 
+function isValidImportAmount(value){
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value >= 0;
+  }
+
+  if (typeof value !== "string") return false;
+
+  const trimmed = value.trim();
+  if (!trimmed) return true; // Existing backups store an unset amount as an empty string.
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed)) return false;
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0;
+}
+
+function isValidImportEntry(entry){
+  if (!isPlainObject(entry)) return false;
+
+  if (hasOwnKey(entry, "id") && (typeof entry.id !== "string" || !entry.id.trim())) {
+    return false;
+  }
+
+  if (hasOwnKey(entry, "name") && typeof entry.name !== "string") {
+    return false;
+  }
+
+  return IMPORT_AMOUNT_KEYS.every((key) => !hasOwnKey(entry, key) || isValidImportAmount(entry[key]));
+}
+
+function isValidImportCollection(entries){
+  if (!Array.isArray(entries)) return false;
+
+  const seenIds = new Set();
+  for (const entry of entries) {
+    if (!isValidImportEntry(entry)) return false;
+
+    if (hasOwnKey(entry, "id")) {
+      const normalizedId = entry.id.trim();
+      if (seenIds.has(normalizedId)) return false;
+      seenIds.add(normalizedId);
+    }
+  }
+
+  return true;
+}
+
+function hasImportCollection(source, keys){
+  return keys.some((key) => hasOwnKey(source, key));
+}
+
+function hasImportCollectionEntries(source, keys){
+  return keys.some((key) => hasOwnKey(source, key) && Array.isArray(source[key]) && source[key].length > 0);
+}
+
+function areImportCollectionsValid(source, keys){
+  return keys.every((key) => !hasOwnKey(source, key) || isValidImportCollection(source[key]));
+}
+
 function isValidImportPayload(payload){
   if (!isPlainObject(payload)) return false;
-  if (isPlainObject(payload.state)) return true;
+  if (hasOwnKey(payload, "state")) {
+    const stateSource = payload.state;
+    return isPlainObject(stateSource)
+      && hasImportCollection(stateSource, IMPORT_STATE_COLLECTION_KEYS)
+      && hasImportCollectionEntries(stateSource, IMPORT_STATE_COLLECTION_KEYS)
+      && areImportCollectionsValid(stateSource, IMPORT_STATE_COLLECTION_KEYS);
+  }
 
-  return [
-    "accounts",
-    "investments",
-    "accs",
-    "etfs",
-    "ui",
-    "prefs",
-    "meta",
-    "schemaVersion"
-  ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+  return hasImportCollection(payload, IMPORT_LEGACY_COLLECTION_KEYS)
+    && hasImportCollectionEntries(payload, IMPORT_LEGACY_COLLECTION_KEYS)
+    && areImportCollectionsValid(payload, IMPORT_LEGACY_COLLECTION_KEYS);
 }
 
 function getImportErrorMessage(error){
