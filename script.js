@@ -160,6 +160,7 @@ function createId(){
 const IMPORT_STATE_COLLECTION_KEYS = ["accounts", "investments"];
 const IMPORT_LEGACY_COLLECTION_KEYS = ["accounts", "investments", "accs", "etfs"];
 const IMPORT_AMOUNT_KEYS = ["amount", "balance", "bal", "value", "val"];
+const DECIMAL_AMOUNT_PATTERN = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 function isPlainObject(value){
   return Object.prototype.toString.call(value) === "[object Object]";
@@ -175,19 +176,23 @@ function normalizeColor(value, fallback){
     : fallback;
 }
 
-function isValidImportAmount(value){
+function parseDecimalAmount(value){
   if (typeof value === "number") {
-    return Number.isFinite(value) && value >= 0;
+    return Number.isFinite(value) && value >= 0 ? value : null;
   }
 
-  if (typeof value !== "string") return false;
+  if (typeof value !== "string") return null;
 
   const trimmed = value.trim();
-  if (!trimmed) return true; // Existing backups store an unset amount as an empty string.
-  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed)) return false;
+  if (!trimmed || !DECIMAL_AMOUNT_PATTERN.test(trimmed)) return null;
 
   const parsed = Number(trimmed);
-  return Number.isFinite(parsed) && parsed >= 0;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function isValidImportAmount(value){
+  if (typeof value === "string" && !value.trim()) return true; // Existing backups store an unset amount as an empty string.
+  return parseDecimalAmount(value) !== null;
 }
 
 function isValidImportEntry(entry){
@@ -757,21 +762,14 @@ function normalizeName(value, fallback){
 
 function normalizeAmountInput(value){
   if (value === "" || value === null || value === undefined) return "";
-  const parsed = parseAmount(value);
-  return String(Math.max(0, parsed));
+  const parsed = parseDecimalAmount(value);
+  return parsed === null ? "0" : String(parsed);
 }
 
 function parseAmount(value){
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  if (typeof value !== "string") {
-    return 0;
-  }
-
-  const parsed = Number.parseFloat(value.replace(/,/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (value === "" || value === null || value === undefined) return 0;
+  const parsed = parseDecimalAmount(value);
+  return parsed === null ? 0 : parsed;
 }
 
 // Value formatting
