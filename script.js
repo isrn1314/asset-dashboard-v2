@@ -336,6 +336,7 @@ function bindEvents(){
   dom.investmentList.addEventListener("input", handleEntryInput);
   dom.accountList.addEventListener("click", handleEntryClick);
   dom.investmentList.addEventListener("click", handleEntryClick);
+  dom.holdingList.addEventListener("click", handleOverviewCtaClick);
 
   // Backup and reset actions
   dom.exportBackupButton.addEventListener("click", exportBackup);
@@ -448,6 +449,13 @@ function findEntry(kind, id){
   return appState[kind].find((item) => item.id === id);
 }
 
+function handleOverviewCtaClick(event){
+  const button = event.target.closest("[data-overview-target]");
+  if (!button) return;
+
+  showView(button.dataset.overviewTarget);
+}
+
 // View switching helpers
 function showView(viewName){
   const nextView = VIEW_NAMES.includes(viewName) ? viewName : "overview";
@@ -511,7 +519,9 @@ function renderOverview(){
         <p class="holding-card__meta">${item.kind === "accounts" ? "銀行帳戶" : "投資部位"} · 佔總資產 ${formatPercent(item.amount, totals.total)}</p>
       </article>
     `).join("")
-    : createEmptyState("目前還沒有資產資料", "先新增銀行帳戶或投資部位，總覽就會自動長出來。");
+    : assetCount === 0
+      ? createOverviewEmptyState()
+      : createEmptyState("目前還沒有資產資料", "先新增銀行帳戶或投資部位，總覽就會自動長出來。");
 }
 
 function renderCollectionSummaries(){
@@ -575,6 +585,19 @@ function createEmptyState(title, description){
     <article class="empty-state surface">
       <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(description)}</p>
+    </article>
+  `;
+}
+
+function createOverviewEmptyState(){
+  return `
+    <article class="empty-state surface">
+      <strong>目前還沒有資產資料</strong>
+      <p>先新增銀行帳戶或投資項目，總覽就會自動顯示資產配置。</p>
+      <div class="empty-state__actions">
+        <button class="button button--primary" type="button" data-overview-target="accounts">新增銀行帳戶</button>
+        <button class="button button--secondary" type="button" data-overview-target="investments">新增投資項目</button>
+      </div>
     </article>
   `;
 }
