@@ -690,6 +690,9 @@ function importBackup(event){
         throw new Error("invalid-backup");
       }
 
+      const shouldImport = confirm("匯入備份會覆蓋目前資產資料。\n\n建議你已先匯出目前備份。\n\n按「取消」不會變更目前資料。");
+      if (!shouldImport) return;
+
       const stateSource = isPlainObject(payload.state) ? payload.state : payload;
       const nextState = normalizeState(stateSource);
       nextState.meta.lastSavedAt = new Date().toLocaleString("zh-TW", { hour12: false });
