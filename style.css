@@ -507,6 +507,46 @@ input[type=number]::-webkit-outer-spin-button{
   gap:12px;
 }
 
+.settings-note,
+.danger-note{
+  margin-top:14px;
+  color:var(--muted-strong);
+  font-size:.92rem;
+  line-height:1.6;
+}
+
+.danger-note{
+  color:#ffc7d2;
+}
+
+.data-detail-list{
+  display:grid;
+  gap:10px;
+  margin-top:14px;
+}
+
+.data-detail-row{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px;
+  border:1px solid rgba(255,255,255,.05);
+  border-radius:var(--radius-md);
+  background:rgba(255,255,255,.03);
+  color:var(--muted-strong);
+  line-height:1.5;
+}
+
+.data-detail-row code{
+  max-width:100%;
+  color:var(--text);
+  font-family:ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size:.86rem;
+  overflow-wrap:anywhere;
+  text-align:right;
+}
+
 .info-list{
   display:grid;
   gap:10px;
@@ -594,5 +634,13 @@ input[type=number]::-webkit-outer-spin-button{
   .surface--hero,
   .surface--section{
     padding:18px;
+  }
+
+  .data-detail-row{
+    display:grid;
+  }
+
+  .data-detail-row code{
+    text-align:left;
   }
 }

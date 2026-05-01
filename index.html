@@ -164,8 +164,9 @@
           <article class="surface surface--section">
             <div class="section-heading">
               <div>
-                <p class="section-eyebrow">Status</p>
-                <h2 class="section-title" id="settings-title">儲存與資料</h2>
+                <p class="section-eyebrow">Local Data</p>
+                <h2 class="section-title" id="settings-title">資料儲存位置</h2>
+                <p class="section-description">這裡顯示目前瀏覽器中的本機資料狀態。</p>
               </div>
             </div>
             <div class="status-card">
@@ -173,9 +174,9 @@
               <p class="status-card__text" id="settingsStatusText">尚未建立資料</p>
             </div>
             <ul class="info-list">
-              <li>資料只存在你目前使用的瀏覽器裝置中。</li>
-              <li>修改資料後會自動儲存，不需要手動按鈕。</li>
-              <li>建議定期匯出備份到 iPhone 的「檔案」或 iCloud Drive。</li>
+              <li>資料只存在你目前使用的瀏覽器與裝置中。</li>
+              <li>系統會自動儲存到本機，不需要手動按儲存。</li>
+              <li>清除瀏覽器資料或更換裝置，可能造成未備份資料遺失。</li>
             </ul>
           </article>
 
@@ -184,8 +185,10 @@
               <div>
                 <p class="section-eyebrow">Backup</p>
                 <h2 class="section-title">備份與還原</h2>
+                <p class="section-description">使用 JSON 備份保留目前資產資料，方便之後還原到這個工具。</p>
               </div>
             </div>
+            <p class="settings-note">匯出會下載目前完整 JSON 備份；匯入會覆蓋目前資產資料，建議匯入前先匯出目前備份。</p>
             <div class="action-grid">
               <button class="button button--primary" id="exportBackupButton" type="button">匯出備份</button>
               <button class="button button--secondary" id="importBackupButton" type="button">匯入備份</button>
@@ -193,14 +196,39 @@
             <input id="importFileInput" type="file" accept="application/json,.json" hidden>
           </article>
 
+          <article class="surface surface--section">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">Advanced</p>
+                <h2 class="section-title">進階資訊</h2>
+                <p class="section-description">這些資訊只用於維護與辨識本機資料，不需要一般使用者操作。</p>
+              </div>
+            </div>
+            <div class="data-detail-list">
+              <div class="data-detail-row">
+                <span>主要資料 key</span>
+                <code>asset_dashboard_state_v3</code>
+              </div>
+              <div class="data-detail-row">
+                <span>分頁狀態 key</span>
+                <code>asset_dashboard_ui_v3</code>
+              </div>
+              <div class="data-detail-row">
+                <span>目前 schema</span>
+                <code>v3</code>
+              </div>
+            </div>
+          </article>
+
           <article class="surface surface--section surface--danger">
             <div class="section-heading">
               <div>
-                <p class="section-eyebrow">Reset</p>
-                <h2 class="section-title">重新開始</h2>
-                <p class="section-description">如果要清空目前資料，可以從這裡重置。</p>
+                <p class="section-eyebrow">Danger</p>
+                <h2 class="section-title">危險操作</h2>
+                <p class="section-description">清除後會移除目前瀏覽器中的資產資料，建議先匯出備份。</p>
               </div>
             </div>
+            <p class="danger-note">此操作不會影響 GitHub 專案檔案，只會影響目前瀏覽器中的資料。</p>
             <button class="button button--danger button--block" id="resetButton" type="button">清除所有資料</button>
           </article>
         </div>
