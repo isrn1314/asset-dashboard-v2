@@ -744,7 +744,7 @@ function importBackup(event){
 
 // Data reset
 function resetAllData(){
-  if (!confirm("確定要清除所有資料並重新開始嗎？")) return;
+  if (!confirm("清除所有資料會移除目前瀏覽器中的資產資料。\n\n建議你已先匯出目前備份。\n\n按「取消」不會變更目前資料。")) return;
   clearTimeout(saveTimer);
   localStorage.removeItem(STORAGE_KEY);
   appState = createDefaultState();
